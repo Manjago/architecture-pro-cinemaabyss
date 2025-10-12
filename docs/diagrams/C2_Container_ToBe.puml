@@ -1,0 +1,39 @@
+@startuml C2_Context_ToBe
+title Диаграмма контейнеров (C2) для системы "CinemaAbyss" (To-Be)
+
+top to bottom direction
+
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+
+' --- АКТОРЫ И ВНЕШНИЕ СИСТЕМЫ ---
+
+Person(user, "Пользователь", "Смотрит фильмы через браузер или мобильное приложение")
+
+System_Ext(ext_payment_gateway, "Платежная система", "Обрабатывает транзакции по банковским картам")
+System_Ext(recommendation_system, "Внешняя рекомендательная система", "Предоставляет персонализированные рекомендации фильмов")
+System_Ext(blob_storage, "Хранилище фильмов", "Хранит видеофайлы и постеры. [S3]")
+System_Ext(ext_online_cinema, "Онлайн-кинотеатры", "Партнеры-поставщики контента")
+
+' --- ГРАНИЦА НАШЕЙ СИСТЕМЫ ---
+System_Boundary(cinema_abyss, "Система 'Кинобездна'") {
+    Container(frontend_app, "Клиентское приложение", "JavaScript, React/Vue", "SPA-приложение, работающее в браузере пользователя")
+    Container(mobile_app, "Мобильное приложение", "Kotlin/Swift", "Нативное мобильное приложение")
+
+    Container(gateway, "API Gateway", "Java, Custom Proxy", "Единая точка входа, проксирование, Strangler Fig Facade")
+
+    Container(auth_service, "Auth Service", "Java", "Управление пользователями, аутентификация, авторизация")
+    Container(billing_service, "Billing Service", "Java", "Управление подписками и покупками")
+    Container(catalog_service, "Catalog Service", "Java", "Метаданные о фильмах, статьях, актерах")
+    Container(user_content_service, "User Content Service", "Java", "Управление оценками и комментариями")
+    Container(access_service, "Access Service", "Java", "Управление правами доступа к контенту")
+    Container(events_service, "Events Service", "Java", "Принимает события по REST и публикует их в Kafka")
+
+    Container(monolith, "Monolith (Legacy)", "Go", "Старая система, функциональность которой постепенно замещается")
+
+    ContainerDb(common_db, "Legacy DB", "PostgreSQL", "Общая база данных для монолита и мигрирующих сервисов")
+    ContainerDb(access_db, "Access DB", "Redis", "Оптимизированное хранилище прав доступа")
+    ContainerQueue(kafka, "Kafka", "Apache Kafka", "Брокер для асинхронного обмена событиями")
+}
+
+
+@enduml
