@@ -35,5 +35,18 @@ System_Boundary(cinema_abyss, "Система 'Кинобездна'") {
     ContainerQueue(kafka, "Kafka", "Apache Kafka", "Брокер для асинхронного обмена событиями")
 }
 
+' --- СВЯЗИ (ПО СЦЕНАРИЯМ) ---
 
+' Общее начало всех сценариев
+Rel(user, frontend_app, "Использует")
+Rel(user, mobile_app, "Использует")
+Rel(frontend_app, gateway, "Отправляет запросы", "HTTPS/JSON")
+Rel(mobile_app, gateway, "Отправляет запросы", "HTTPS/JSON")
+
+
+' Сценарий: Пользователь управляет системой
+Rel(gateway, auth_service, "Переадресует запросы", "HTTPS/JSON")
+Rel(auth_service, common_db, "Сохраняет и читает данные", "TCP/IP PostgresDB")
+Rel(auth_service, events_service, "Отправляет запросы", "HTTPS/JSON")
+Rel(events_service, kafka, "Отправляет сообщения", "Kafka/JSON")
 @enduml
