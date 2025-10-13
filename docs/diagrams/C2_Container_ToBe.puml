@@ -21,12 +21,12 @@ System_Boundary(cinema_abyss, "Система 'Кинобездна'") {
 
     Container(gateway, "API Gateway", "Java, Custom Proxy", "Единая точка входа, проксирование, Strangler Fig Facade")
 
-    Container(auth_service, "Auth Service", "Java", "Управление пользователями, аутентификация, авторизация")
-    Container(billing_service, "Billing Service", "Java", "Управление подписками и покупками")
-    Container(catalog_service, "Catalog Service", "Java", "Метаданные о фильмах, статьях, актерах")
-    Container(user_content_service, "User Content Service", "Java", "Управление оценками и комментариями")
-    Container(access_service, "Access Service", "Java", "Управление правами доступа к контенту")
-    Container(events_service, "Events Service", "Java", "Принимает события по REST и публикует их в Kafka")
+    Container(auth_service, "Auth Service", "Java + Lightweight framework", "Управление пользователями, аутентификация, авторизация")
+    Container(billing_service, "Billing Service", "Java + Lightweight framework", "Управление подписками и покупками")
+    Container(catalog_service, "Catalog Service", "Java + Lightweight framework", "Метаданные о фильмах, статьях, актерах")
+    Container(user_content_service, "User Content Service", "Java + Lightweight framework", "Управление оценками и комментариями")
+    Container(access_service, "Access Service", "Java + Lightweight framework", "Управление правами доступа к контенту")
+    Container(events_service, "Events Service", "Java + Lightweight framework", "Принимает события по REST и публикует их в Kafka")
 
     Container(monolith, "Monolith (Legacy)", "Go", "Старая система, функциональность которой постепенно замещается")
 
@@ -44,9 +44,72 @@ Rel(frontend_app, gateway, "Отправляет запросы", "HTTPS/JSON")
 Rel(mobile_app, gateway, "Отправляет запросы", "HTTPS/JSON")
 
 
-' Сценарий: Пользователь управляет системой
-Rel(gateway, auth_service, "Переадресует запросы", "HTTPS/JSON")
+' *** Сценарий: пользователь регистрируется в системе
+' Регистрируемся в auth_service через gateway
+Rel(gateway, auth_service, "Переадресует запросы", "HTTPS/JSON") 
+' Сохраняем данные в БД
 Rel(auth_service, common_db, "Сохраняет и читает данные", "TCP/IP PostgresDB")
+' Отбрасываем событие UserRegistered
 Rel(auth_service, events_service, "Отправляет запросы", "HTTPS/JSON")
-Rel(events_service, kafka, "Отправляет сообщения", "Kafka/JSON")
+Rel(events_service, kafka, "Отправляет сообщение", "Kafka/JSON")
+
+' *** Сценарий: покупка фильма
+' Выбираем фильм для записи
+Rel(gateway, catalog_service, "Переадресует запросы", "HTTPS/JSON") 
+' Покупаем фильм
+Rel(gateway, billing_service, "Отправляет запросы", "HTTPS/JSON") 
+' Сохраняем данные в БД
+Rel(billing_service, common_db, "Сохраняет и читает данные", "TCP/IP PostgresDB") 
+' Отбрасываем событие MovieRented
+Rel(billing_service, events_service, "Отправляет запросы", "HTTPS/JSON")
+'Rel(events_service, kafka, "Отправляет сообщение", "Kafka/JSON")
+' Обновляет права на фильмы
+Rel(kafka, access_service, "Получает сообщение", "Kafka/JSON")
+Rel(access_service, access_db, "Сохраняет данные", "TCP/IP PostgresDB")
+' Платеж во внешнюю систему
+Rel(billing_service, ext_payment_gateway, "Отправляет запросы", "HTTPS/JSON")
+
+' *** Сценарий: оформление подписки (как покупка фильма, но другое сообщение)
+' Пользователь на что-то подписался
+'Rel(gateway, billing_service, "Отправляет запросы", "HTTPS/JSON") 
+' Сохраняем данные в БД
+'Rel(billing_service, common_db, "Сохраняет и читает данные", "TCP/IP PostgresDB") 
+' Отбрасываем событие SubscriptionPurchased
+'Rel(billing_service, events_service, "Отправляет запросы", "HTTPS/JSON")
+'Rel(events_service, kafka, "Отправляет сообщение", "Kafka/JSON")
+' Обновляет права на фильмы
+'Rel(kafka, access_service, "Получает сообщение", "Kafka/JSON")
+'Rel(access_service, access_db, "Сохраняет данные", "TCP/IP PostgresDB")
+' Платеж во внешнюю систему
+'Rel(billing_service, ext_payment_gateway, "Отправляет запросы", "HTTPS/JSON")
+
+' *** Сценарий: смотреть фильм
+' Выбираем фильм для просмотра
+' Rel(gateway, catalog_service, "Переадресует запросы", "HTTPS/JSON") 
+' Проверяем права доступа на фильм
+Rel(gateway, access_service, "Отправляет запросы", "HTTPS/JSON") 
+' Смотрим фильм
+Rel(gateway, blob_storage, "Отправляет запросы", "TCP") 
+
+' *** Сценарий: выбор фильма (читать рекомендации, читать статьи, просматривать карточки фильма)
+' Просматриваем фильмы
+' Rel(gateway, catalog_service, "Переадресует запросы", "HTTPS/JSON") 
+
+' *** Сценарий: оценить фильм
+' Просматриваем фильмы
+' Rel(gateway, catalog_service, "Переадресует запросы", "HTTPS/JSON") 
+' Ставит оценку
+Rel(gateway, user_content_service, "Отправляет запросы", "HTTPS/JSON") 
+' Отбрасываем событие MovieRated
+Rel(user_content_service, events_service, "Отправляет запросы", "HTTPS/JSON")
+'Rel(events_service, kafka, "Отправляет сообщение", "Kafka/JSON")
+
+' --- СВЯЗИ (ПО СЛУЖЕБНЫМ ПРОЦЕССАМ) ---
+' *** Процесс: Обновляем данные из внешней рекомендательной системы
+' ? вопрос, там реббит во внешней системе - прописываем подробно?
+Rel(catalog_service, recommendation_system, "Отправляет запросы", "???")
+
+' *** Процесс: Обновляем данные из онлайн-кинотеатров
+Rel(catalog_service, ext_online_cinema, "Отправляет запросы", "HTTPS/JSON")
+
 @enduml
