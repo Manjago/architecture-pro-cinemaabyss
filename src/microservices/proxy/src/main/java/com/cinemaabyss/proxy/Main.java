@@ -16,6 +16,12 @@ public class Main {
 
         port(port);
 
+        final Config config = new Config();
+        logger.info("Configuration loaded: monolith={}, movies={}, migration={}%",
+                config.getMonolithUrl(),
+                config.getMoviesServiceUrl(),
+                config.getMoviesMigrationPercent());
+
         logger.info("Starting Proxy Service on port {}", port);
 
         // Пока просто Hello World на любой запрос
