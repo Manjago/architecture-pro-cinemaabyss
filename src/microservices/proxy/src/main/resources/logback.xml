@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Простой вывод в консоль -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Отключаем DEBUG от Jetty и Spark -->
+    <logger name="org.eclipse.jetty" level="WARN"/>
+    <logger name="spark" level="WARN"/>
+    
+    <!-- Наше приложение на INFO -->
+    <logger name="com.cinemaabyss" level="INFO"/>
+
+    <!-- Общий уровень -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
