@@ -14,20 +14,25 @@ public class Main {
         // Читаем порт из переменной окружения, по умолчанию 8000
         final int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8000"));
 
-        port(port);
-
         final Config config = new Config();
         logger.info("Configuration loaded: monolith={}, movies={}, migration={}%",
                 config.getMonolithUrl(),
                 config.getMoviesServiceUrl(),
                 config.getMoviesMigrationPercent());
 
+        final ProxyService proxyService = new ProxyService();  // <-- создали сервис
+
+        port(port);
         logger.info("Starting Proxy Service on port {}", port);
 
-        // Пока просто Hello World на любой запрос
+        // Проксируем все запросы (пока на монолит)
         get("/*", (req, res) -> {
             logger.info("Received request: {} {}", req.requestMethod(), req.pathInfo());
-            return "Hello from Proxy! 👋";
+            return proxyService.proxyRequest(
+                    config.getMonolithUrl(), // <-- пока всё на монолит
+                    req.pathInfo(),
+                    req.requestMethod()
+            );
         });
 
         awaitInitialization();
