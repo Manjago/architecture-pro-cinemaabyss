@@ -1,15 +1,16 @@
 package com.cinemaabyss.proxy;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.concurrent.ThreadLocalRandom;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ProxyService {
+
     private static final Logger logger = LoggerFactory.getLogger(ProxyService.class);
     private final HttpClient httpClient;
 
@@ -19,7 +20,7 @@ public class ProxyService {
                 .build();
     }
 
-    public String handleRequest(Config config, String path, String method) {
+    public String handleRequest(Config config, String path, String method) throws IOException, InterruptedException {
         final String targetUrl = selectTarget(config, path);
         return proxyRequest(targetUrl, path, method);
     }
@@ -50,25 +51,20 @@ public class ProxyService {
         }
     }
 
-    private String proxyRequest(String targetUrl, String path, String method) {
-        try {
-            final String fullUrl = targetUrl + path;
-            logger.info("Proxying {} {} to {}", method, path, fullUrl);
+    private String proxyRequest(String targetUrl, String path, String method) throws IOException, InterruptedException {
+        final String fullUrl = targetUrl + path;
+        logger.info("Proxying {} {} to {}", method, path, fullUrl);
 
-            final HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(fullUrl))
-                    .method(method, HttpRequest.BodyPublishers.noBody())
-                    .build();
+        final HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(fullUrl))
+                .method(method, HttpRequest.BodyPublishers.noBody())
+                .build();
 
-            final HttpResponse<String> response = httpClient.send(request, 
-                    HttpResponse.BodyHandlers.ofString());
+        final HttpResponse<String> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
 
-            logger.info("Response status: {}", response.statusCode());
-            return response.body();
+        logger.info("Response status: {}", response.statusCode());
+        return response.body();
 
-        } catch (Exception e) {
-            logger.error("Error proxying request to {}: {}", targetUrl, e.getMessage(), e);
-            return "Error: " + e.getMessage();
-        }
     }
 }

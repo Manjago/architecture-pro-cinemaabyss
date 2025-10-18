@@ -1,5 +1,6 @@
 package com.cinemaabyss.proxy;
 
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import static spark.Spark.awaitInitialization;
@@ -27,9 +28,19 @@ public class Main {
 
         get("/*", (req, res) -> {
             logger.info("Received request: {} {}", req.requestMethod(), req.pathInfo());
-            return proxyService.handleRequest(config, req.pathInfo(), req.requestMethod());
+            try {
+                return proxyService.handleRequest(config, req.pathInfo(), req.requestMethod());
+            } catch (IOException | InterruptedException e) {
+                logger.error("Error handling request: {}", e.getMessage(), e);
+                res.status(500);
+                res.type("application/problem+json");
+                return ProblemJson.create(
+                        500,
+                        "Internal Server Error",
+                        "Error proxying request: " + e.getMessage()
+                );
+            }
         });
-        
         awaitInitialization();
         logger.info("Proxy Service started successfully!");
     }
