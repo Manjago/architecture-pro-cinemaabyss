@@ -22,6 +22,11 @@ public class Main {
         port(port);
         logger.info("Starting Proxy Service on port {}", port);
 
+        // Логируем все входящие запросы
+        before("/*", (req, res) -> {
+            logger.info("Received request: {} {}", req.requestMethod(), req.pathInfo());
+        });
+
         // Глобальный обработчик исключений
         exception(Exception.class, (e, req, res) -> {
             logger.error("Error handling request {} {}: {}",
@@ -31,10 +36,14 @@ public class Main {
             res.body(ProblemJson.internalError("Error proxying request: " + e.getMessage()));
         });
 
-        get("/*", (req, res) -> {
-            logger.info("Received request: {} {}", req.requestMethod(), req.pathInfo());
-            return proxyService.handleRequest(config, req.pathInfo(), req.requestMethod());
-        });
+        // Универсальный роут для всех методов и путей
+        get("/*", (req, res) -> proxyService.handleRequest(config, req));
+        post("/*", (req, res) -> proxyService.handleRequest(config, req));
+        put("/*", (req, res) -> proxyService.handleRequest(config, req));
+        delete("/*", (req, res) -> proxyService.handleRequest(config, req));
+        patch("/*", (req, res) -> proxyService.handleRequest(config, req));
+        options("/*", (req, res) -> proxyService.handleRequest(config, req));
+        head("/*", (req, res) -> proxyService.handleRequest(config, req));
 
         awaitInitialization();
         logger.info("Proxy Service started successfully!");
