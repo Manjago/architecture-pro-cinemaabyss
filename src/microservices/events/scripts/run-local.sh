@@ -1,4 +1,16 @@
 #!/bin/bash
 
+# Переменные окружения для локального запуска
+export PORT=8082
+export KAFKA_BROKERS=localhost:9092
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=cinemaabyss
+export POSTGRES_USER=postgres
+export POSTGRES_PASSWORD=postgres
+
+# Переходим в корень проекта
 cd "$(dirname "$0")/.."
-./mvnw clean compile
+
+# Компилируем и запускаем
+./mvnw clean compile exec:java
