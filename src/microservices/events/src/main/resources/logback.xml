@@ -12,7 +12,10 @@
     
     <!-- Kafka clients - INFO чтобы видеть подключение -->
     <logger name="org.apache.kafka" level="INFO"/>  
-    
+
+    <!-- Отключаем дамп конфига Kafka -->
+    <logger name="org.apache.kafka.common.config.AbstractConfig" level="WARN"/>    
+
     <!-- Javalin - только основные сообщения -->
     <logger name="io.javalin.Javalin" level="INFO"/>
     
