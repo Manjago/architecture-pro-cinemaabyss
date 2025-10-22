@@ -1,6 +1,7 @@
 package com.cinemaabyss.events
 
 import io.javalin.Javalin
+import java.time.Instant
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AdminClientConfig
 import org.slf4j.LoggerFactory
@@ -17,6 +18,32 @@ fun main() {
 
     // Health check endpoint
     app.get("/api/events/health") { ctx -> ctx.json(mapOf("status" to true)) }
+
+    // User Event endpoint
+    app.post("/api/events/user") { ctx ->
+        val userEvent = ctx.bodyAsClass(UserEvent::class.java)
+
+        // Генерируем event_id и timestamp
+        val eventId = "user-${userEvent.userId}-${userEvent.action}-${System.currentTimeMillis()}"
+        val timestamp = Instant.now().toString()
+
+        // Отправляем в Kafka
+        val metadata = KafkaProducerService.sendEvent("user-events", userEvent)
+
+        // Формируем обёрнутое событие
+        val event = Event(id = eventId, type = "user", timestamp = timestamp, payload = userEvent)
+
+        // Возвращаем ответ
+        val response =
+                EventResponse(
+                        status = "success",
+                        partition = metadata.partition(),
+                        offset = metadata.offset(),
+                        event = event
+                )
+
+        ctx.status(201).json(response)
+    }
 
     logger.info("Events Service started successfully on http://localhost:${Config.port}")
     logger.info("Health check available at http://localhost:${Config.port}/api/events/health")

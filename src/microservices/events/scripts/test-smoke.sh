@@ -3,6 +3,7 @@
 # Цвета для вывода
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "Running smoke tests for Events Service..."
@@ -22,6 +23,39 @@ else
     echo -e "${RED}✗ FAILED${NC}"
     echo "Expected: {\"status\":true}"
     echo "Got: $RESPONSE"
+    exit 1
+fi
+
+# Тест 2: User Event
+echo -n "Testing POST /api/events/user... "
+RESPONSE=$(curl -s -X POST http://localhost:8082/api/events/user \
+    -H "Content-Type: application/json" \
+    -d '{
+        "user_id": 123,
+        "username": "testuser",
+        "email": "test@example.com",
+        "action": "registered",
+        "timestamp": "2023-01-15T14:30:00Z"
+    }')
+
+# Проверяем статус код
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8082/api/events/user \
+    -H "Content-Type: application/json" \
+    -d '{
+        "user_id": 123,
+        "username": "testuser",
+        "email": "test@example.com",
+        "action": "registered",
+        "timestamp": "2023-01-15T14:30:00Z"
+    }')
+
+if [ "$HTTP_CODE" = "201" ] && echo "$RESPONSE" | grep -q '"status":"success"' && echo "$RESPONSE" | grep -q '"type":"user"'; then
+    echo -e "${GREEN}✓ PASSED${NC}"
+    echo -e "${YELLOW}  Response: $RESPONSE${NC}"
+else
+    echo -e "${RED}✗ FAILED${NC}"
+    echo "Expected: HTTP 201 with status=success and type=user"
+    echo "Got HTTP $HTTP_CODE: $RESPONSE"
     exit 1
 fi
 
