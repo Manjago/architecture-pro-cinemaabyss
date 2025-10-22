@@ -14,6 +14,9 @@ fun main() {
 
     // Проверяем подключение к Kafka
     checkKafkaConnection()
+    
+    // Запускаем Kafka Consumer
+    KafkaConsumerService.start()
 
     val app = Javalin.create { config -> 
         config.showJavalinBanner = false 
@@ -47,6 +50,15 @@ fun main() {
 
     logger.info("Events Service started successfully on http://localhost:${Config.port}")
     logger.info("Health check available at http://localhost:${Config.port}/api/events/health")
+    
+    // Graceful shutdown
+    Runtime.getRuntime().addShutdownHook(Thread {
+        logger.info("Shutdown signal received, cleaning up...")
+        KafkaConsumerService.stop()
+        KafkaProducerService.close()
+        app.stop()
+        logger.info("Service stopped gracefully")
+    })
 }
 
 private inline fun <reified T : EventPayload> handleEvent(
