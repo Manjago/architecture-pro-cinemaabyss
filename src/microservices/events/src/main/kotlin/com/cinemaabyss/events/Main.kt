@@ -23,17 +23,59 @@ fun main() {
     app.post("/api/events/user") { ctx ->
         val userEvent = ctx.bodyAsClass(UserEvent::class.java)
 
-        // Генерируем event_id и timestamp
         val eventId = "user-${userEvent.userId}-${userEvent.action}-${System.currentTimeMillis()}"
         val timestamp = Instant.now().toString()
 
-        // Отправляем в Kafka
         val metadata = KafkaProducerService.sendEvent("user-events", userEvent)
 
-        // Формируем обёрнутое событие
         val event = Event(id = eventId, type = "user", timestamp = timestamp, payload = userEvent)
 
-        // Возвращаем ответ
+        val response =
+                EventResponse(
+                        status = "success",
+                        partition = metadata.partition(),
+                        offset = metadata.offset(),
+                        event = event
+                )
+
+        ctx.status(201).json(response)
+    }
+
+    // Movie Event endpoint
+    app.post("/api/events/movie") { ctx ->
+        val movieEvent = ctx.bodyAsClass(MovieEvent::class.java)
+
+        val eventId =
+                "movie-${movieEvent.movieId}-${movieEvent.action}-${System.currentTimeMillis()}"
+        val timestamp = Instant.now().toString()
+
+        val metadata = KafkaProducerService.sendEvent("movie-events", movieEvent)
+
+        val event = Event(id = eventId, type = "movie", timestamp = timestamp, payload = movieEvent)
+
+        val response =
+                EventResponse(
+                        status = "success",
+                        partition = metadata.partition(),
+                        offset = metadata.offset(),
+                        event = event
+                )
+
+        ctx.status(201).json(response)
+    }
+
+    // Payment Event endpoint
+    app.post("/api/events/payment") { ctx ->
+        val paymentEvent = ctx.bodyAsClass(PaymentEvent::class.java)
+
+        val eventId = "payment-${paymentEvent.paymentId}-${System.currentTimeMillis()}"
+        val timestamp = Instant.now().toString()
+
+        val metadata = KafkaProducerService.sendEvent("payment-events", paymentEvent)
+
+        val event =
+                Event(id = eventId, type = "payment", timestamp = timestamp, payload = paymentEvent)
+
         val response =
                 EventResponse(
                         status = "success",

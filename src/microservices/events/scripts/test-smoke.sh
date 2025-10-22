@@ -28,30 +28,16 @@ fi
 
 # Тест 2: User Event
 echo -n "Testing POST /api/events/user... "
-RESPONSE=$(curl -s -X POST http://localhost:8082/api/events/user \
-    -H "Content-Type: application/json" \
-    -d '{
-        "user_id": 123,
-        "username": "testuser",
-        "email": "test@example.com",
-        "action": "registered",
-        "timestamp": "2023-01-15T14:30:00Z"
-    }')
-
-# Проверяем статус код
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8082/api/events/user \
     -H "Content-Type: application/json" \
-    -d '{
-        "user_id": 123,
-        "username": "testuser",
-        "email": "test@example.com",
-        "action": "registered",
-        "timestamp": "2023-01-15T14:30:00Z"
-    }')
+    -d '{"user_id":123,"username":"testuser","email":"test@example.com","action":"registered","timestamp":"2023-01-15T14:30:00Z"}')
+
+RESPONSE=$(curl -s -X POST http://localhost:8082/api/events/user \
+    -H "Content-Type: application/json" \
+    -d '{"user_id":123,"username":"testuser","email":"test@example.com","action":"registered","timestamp":"2023-01-15T14:30:00Z"}')
 
 if [ "$HTTP_CODE" = "201" ] && echo "$RESPONSE" | grep -q '"status":"success"' && echo "$RESPONSE" | grep -q '"type":"user"'; then
     echo -e "${GREEN}✓ PASSED${NC}"
-    echo -e "${YELLOW}  Response: $RESPONSE${NC}"
 else
     echo -e "${RED}✗ FAILED${NC}"
     echo "Expected: HTTP 201 with status=success and type=user"
@@ -59,4 +45,43 @@ else
     exit 1
 fi
 
+# Тест 3: Movie Event
+echo -n "Testing POST /api/events/movie... "
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8082/api/events/movie \
+    -H "Content-Type: application/json" \
+    -d '{"movie_id":42,"title":"Inception","action":"viewed","user_id":123,"rating":8.8}')
+
+RESPONSE=$(curl -s -X POST http://localhost:8082/api/events/movie \
+    -H "Content-Type: application/json" \
+    -d '{"movie_id":42,"title":"Inception","action":"viewed","user_id":123,"rating":8.8}')
+
+if [ "$HTTP_CODE" = "201" ] && echo "$RESPONSE" | grep -q '"status":"success"' && echo "$RESPONSE" | grep -q '"type":"movie"'; then
+    echo -e "${GREEN}✓ PASSED${NC}"
+else
+    echo -e "${RED}✗ FAILED${NC}"
+    echo "Expected: HTTP 201 with status=success and type=movie"
+    echo "Got HTTP $HTTP_CODE: $RESPONSE"
+    exit 1
+fi
+
+# Тест 4: Payment Event
+echo -n "Testing POST /api/events/payment... "
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8082/api/events/payment \
+    -H "Content-Type: application/json" \
+    -d '{"payment_id":789,"user_id":123,"amount":9.99,"status":"completed","timestamp":"2023-01-15T14:30:00Z","method_type":"credit_card"}')
+
+RESPONSE=$(curl -s -X POST http://localhost:8082/api/events/payment \
+    -H "Content-Type: application/json" \
+    -d '{"payment_id":789,"user_id":123,"amount":9.99,"status":"completed","timestamp":"2023-01-15T14:30:00Z","method_type":"credit_card"}')
+
+if [ "$HTTP_CODE" = "201" ] && echo "$RESPONSE" | grep -q '"status":"success"' && echo "$RESPONSE" | grep -q '"type":"payment"'; then
+    echo -e "${GREEN}✓ PASSED${NC}"
+else
+    echo -e "${RED}✗ FAILED${NC}"
+    echo "Expected: HTTP 201 with status=success and type=payment"
+    echo "Got HTTP $HTTP_CODE: $RESPONSE"
+    exit 1
+fi
+
 echo -e "\n${GREEN}All smoke tests passed!${NC}"
+echo -e "${YELLOW}Summary: 4 tests passed (health, user, movie, payment)${NC}"
