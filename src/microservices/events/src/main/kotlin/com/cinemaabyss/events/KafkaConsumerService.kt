@@ -14,17 +14,18 @@ object KafkaConsumerService {
     private var running = false
 
     private val consumer: KafkaConsumer<String, String> by lazy {
-        val props =
-                mapOf(
-                        ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to Config.kafkaBrokers,
-                        ConsumerConfig.GROUP_ID_CONFIG to "events-service-consumer-group",
-                        ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to
-                                StringDeserializer::class.java.name,
-                        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to
-                                StringDeserializer::class.java.name,
-                        ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
-                        ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "true"
-                )
+val props =
+        mapOf(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to Config.kafkaBrokers,
+                ConsumerConfig.GROUP_ID_CONFIG to "events-service-consumer-group",
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to
+                        StringDeserializer::class.java.name,
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "true",
+                ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG to "10000", 
+                ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG to "3000" 
+        )
 
         logger.info("Initializing Kafka Consumer with brokers: ${Config.kafkaBrokers}")
         KafkaConsumer(props)
