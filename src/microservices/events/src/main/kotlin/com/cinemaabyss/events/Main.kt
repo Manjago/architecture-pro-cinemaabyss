@@ -73,9 +73,11 @@ private inline fun <reified T : EventPayload> handleEvent(
     val eventId = eventIdGenerator(payload)
     val timestamp = Instant.now().toString()
 
-    val metadata = KafkaProducerService.sendEvent(topic, payload)
-
+    // Создаём обёрнутое событие
     val event = Event(id = eventId, type = eventType, timestamp = timestamp, payload = payload)
+
+    // Отправляем в Kafka целиком Event, а не payload!
+    val metadata = KafkaProducerService.sendEvent(topic, event)
 
     val response =
             EventResponse(
