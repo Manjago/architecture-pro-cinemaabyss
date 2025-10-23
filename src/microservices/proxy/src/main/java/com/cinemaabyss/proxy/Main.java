@@ -1,99 +1,51 @@
-package com.cinemaabyss.events
+package com.cinemaabyss.proxy;
 
-import io.javalin.Javalin
-import io.javalin.http.Context
-import org.apache.kafka.clients.admin.AdminClient
-import org.apache.kafka.clients.admin.AdminClientConfig
-import org.slf4j.LoggerFactory
-import java.time.Instant
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import static spark.Spark.*;
 
-private val logger = LoggerFactory.getLogger("EventsService")
+public class Main {
 
-fun main() {
-    logger.info("Starting Events Service on port ${Config.port}")
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
-    // Проверяем подключение к Kafka
-    checkKafkaConnection()
+    public static void main(String[] args) {
+        final int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8000"));
 
-    val app = Javalin.create { config -> 
-        config.showJavalinBanner = false 
-    }.start(Config.port)
+        final Config config = new Config();
+        logger.info("Configuration loaded: monolith={}, movies={}, migration={}%",
+                config.getMonolithUrl(),
+                config.getMoviesServiceUrl(),
+                config.getMoviesMigrationPercent());
 
-    // Health check endpoint
-    app.get("/api/events/health") { ctx -> 
-        ctx.json(mapOf("status" to true)) 
-    }
-    
-    // User Event endpoint
-    app.post("/api/events/user") { ctx ->
-        handleEvent<UserEvent>(ctx, "user-events", "user") { event ->
-            "user-${event.userId}-${event.action}-${System.currentTimeMillis()}"
-        }
-    }
-    
-    // Movie Event endpoint
-    app.post("/api/events/movie") { ctx ->
-        handleEvent<MovieEvent>(ctx, "movie-events", "movie") { event ->
-            "movie-${event.movieId}-${event.action}-${System.currentTimeMillis()}"
-        }
-    }
-    
-    // Payment Event endpoint
-    app.post("/api/events/payment") { ctx ->
-        handleEvent<PaymentEvent>(ctx, "payment-events", "payment") { event ->
-            "payment-${event.paymentId}-${System.currentTimeMillis()}"
-        }
-    }
+        final ProxyService proxyService = new ProxyService();
 
-    logger.info("Events Service started successfully on http://localhost:${Config.port}")
-    logger.info("Health check available at http://localhost:${Config.port}/api/events/health")
-}
+        port(port);
+        logger.info("Starting Proxy Service on port {}", port);
 
-private inline fun <reified T : EventPayload> handleEvent(
-    ctx: Context,
-    topic: String,
-    eventType: String,
-    eventIdGenerator: (T) -> String
-) {
-    val payload = ctx.bodyAsClass(T::class.java)
-    val eventId = eventIdGenerator(payload)
-    val timestamp = Instant.now().toString()
-    
-    val metadata = KafkaProducerService.sendEvent(topic, payload)
-    
-    val event = Event(
-        id = eventId,
-        type = eventType,
-        timestamp = timestamp,
-        payload = payload
-    )
-    
-    val response = EventResponse(
-        status = "success",
-        partition = metadata.partition(),
-        offset = metadata.offset(),
-        event = event
-    )
-    
-    ctx.status(201).json(response)
-}
+        // Логируем все входящие запросы
+        before("/*", (req, res) -> {
+            logger.info("Received request: {} {}", req.requestMethod(), req.pathInfo());
+        });
 
-private fun checkKafkaConnection() {
-    logger.info("Checking Kafka connection to ${Config.kafkaBrokers}...")
+        // Глобальный обработчик исключений
+        exception(Exception.class, (e, req, res) -> {
+            logger.error("Error handling request {} {}: {}",
+                    req.requestMethod(), req.pathInfo(), e.getMessage(), e);
+            res.status(500);
+            res.type("application/problem+json");
+            res.body(ProblemJson.internalError("Error proxying request: " + e.getMessage()));
+        });
 
-    val props = mapOf(
-        AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG to Config.kafkaBrokers,
-        AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG to "5000"
-    )
+        // Универсальный роут для всех методов и путей
+        get("/*", (req, res) -> proxyService.handleRequest(config, req));
+        post("/*", (req, res) -> proxyService.handleRequest(config, req));
+        put("/*", (req, res) -> proxyService.handleRequest(config, req));
+        delete("/*", (req, res) -> proxyService.handleRequest(config, req));
+        patch("/*", (req, res) -> proxyService.handleRequest(config, req));
+        options("/*", (req, res) -> proxyService.handleRequest(config, req));
+        head("/*", (req, res) -> proxyService.handleRequest(config, req));
 
-    try {
-        AdminClient.create(props).use { admin ->
-            val clusterInfo = admin.describeCluster()
-            val clusterId = clusterInfo.clusterId().get()
-            logger.info("Successfully connected to Kafka cluster: $clusterId")
-        }
-    } catch (e: Exception) {
-        logger.error("Failed to connect to Kafka: ${e.message}")
-        throw e
+        awaitInitialization();
+        logger.info("Proxy Service started successfully!");
     }
 }
