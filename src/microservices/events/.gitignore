@@ -3,3 +3,4 @@ target
 .mvn
 nbactions.xml
 .idea
+dependency-reduced-pom.xml
