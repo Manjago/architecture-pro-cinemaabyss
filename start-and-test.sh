@@ -44,7 +44,6 @@ rm run-tests-temp.sh
 cd ../.. # Возвращаемся в корень
 
 # --- Шаг 3: Завершение ---
-echo "🎉 All tests passed!"
 echo ""
 echo "To see logs, run: docker-compose -p $PROJECT_NAME logs -f"
 echo "To stop all services, run: docker-compose -p $PROJECT_NAME down"
