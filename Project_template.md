@@ -63,10 +63,10 @@ MVP-сервис для работы с Kafka реализован на **Kotlin
     ![Обзор топика user-events](./docs/screenshots/user-events-overview.png)
 *   Сообщение в топике `user-events`:
     ![Сообщение в топике user-events](./docs/screenshots/user-events-message.png)
-*   Обзор топика `payments-events`:
-    ![Обзор топика payments-events](./docs/screenshots/payments-events-overview.png)
-*   Сообщение в топике `payments-events`:
-    ![Сообщение в топике payments-events](./docs/screenshots/payments-events-message.png)
+*   Обзор топика `payment-events`:
+    ![Обзор топика payment-events](./docs/screenshots/payment-events-overview.png)
+*   Сообщение в топике `payment-events`:
+    ![Сообщение в топике payment-events](./docs/screenshots/payment-events-message.png)
 
 ## Задание 3
 
