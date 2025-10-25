@@ -29,6 +29,27 @@ spec:
         env:
         - name: PORT
           value: "8082"
+        - name: KAFKA_BROKERS
+          value: "kafka:9092" 
+        - name: POSTGRES_HOST
+          value: "postgres" 
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          valueFrom: 
+            configMapKeyRef:
+              name: cinemaabyss-config
+              key: DB_NAME
+        - name: POSTGRES_USER
+          valueFrom: 
+            configMapKeyRef:
+              name: cinemaabyss-config
+              key: DB_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom: 
+            secretKeyRef:
+              name: cinemaabyss-secrets
+              key: DB_PASSWORD
         envFrom:
         - configMapRef:
             name: cinemaabyss-config
