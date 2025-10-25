@@ -9,10 +9,17 @@ RUN mvn package -DskipTests
 
 # --- Этап 2: Исполнение (Runtime) ---
 FROM eclipse-temurin:21-jre-alpine
+
+# Install necessary runtime dependencies AND bash (for wait-for-it.sh)
+RUN apk --no-cache add ca-certificates tzdata bash
+
 WORKDIR /app
 
 COPY --from=builder /app/target/events-service-*.jar app.jar
 
 EXPOSE 8082 
+
+COPY wait-for-it.sh /usr/local/bin/wait-for-it.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh
 
 CMD ["java", "-jar", "app.jar"]

@@ -91,6 +91,11 @@ services:
     depends_on:
       - postgres
       - kafka
+    command: [
+      "/usr/local/bin/wait-for-it.sh", "postgres:5432", "-t", "60", "--",
+      "/usr/local/bin/wait-for-it.sh", "kafka:9092", "-t", "60", "--",
+      "java", "-jar", "app.jar"
+    ]
     ports:
       - "8082:8082"
     environment:
@@ -114,6 +119,11 @@ services:
       - monolith
       - movies-service
       - events-service
+    command: [
+      "/usr/local/bin/wait-for-it.sh", "monolith:8080", "-t", "60", "--",
+      "/usr/local/bin/wait-for-it.sh", "movies-service:8081", "-t", "60", "--",
+      "java", "-jar", "app.jar"
+    ]
     ports:
       - "8000:8000"
     environment:
