@@ -70,219 +70,53 @@ MVP-сервис для работы с Kafka реализован на **Kotlin
 *   Сообщение в топике `payment-events`:
     ![Сообщение в топике payment-events](./docs/screenshots/payment-events-message.png)
 
-## Задание 3
+### Решение Задания 3
 
-Команда начала переезд в Kubernetes для лучшего масштабирования и повышения надежности. 
-Вам, как архитектору осталось самое сложное:
- - реализовать CI/CD для сборки прокси сервиса
- - реализовать необходимые конфигурационные файлы для переключения трафика.
+Задание было разделено на две части: настройка CI/CD и развертывание сервисов в Kubernetes.
 
+#### Часть 1. Настройка CI/CD
 
-### CI/CD
+*(Этот раздел будет заполнен, когда сделаем часть про GitHub Actions. Будет выполнено далее)*
 
- В папке .github/worflows доработайте деплой новых сервисов proxy и events в docker-build-push.yml , чтобы api-tests при сборке отрабатывали корректно при отправке коммита в вашу новую ветку.
+#### Часть 2. Настройка прокси-сервиса в Kubernetes
 
-Нужно доработать 
-```yaml
-on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - '.github/workflows/docker-build-push.yml'
-  release:
-    types: [published]
-```
-и добавить необходимые шаги в блок
-```yaml
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+Для развертывания системы в Kubernetes был выполнен полный цикл работ, включая решение ряда нетривиальных проблем с локальным окружением.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+**Шаг 1: Подготовка учетных данных и конфигураций**
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+1.  Был создан **Personal Access Token (PAT)** в GitHub с правами `read:packages` и `write:packages` для доступа к GitHub Container Registry (ghcr.io).
+2.  С помощью `docker login` и `kubectl create secret` был подготовлен манифест `dockerconfigsecret.yaml`, содержащий учетные данные для Kubernetes.
+3.  Были исправлены пути к Docker-образам во всех манифестах развертывания (`monolith.yaml`, `movies-service.yaml`, `proxy-service.yaml`, `events-service.yaml`), чтобы они указывали на репозиторий `ghcr.io/manjago/architecture-pro-cinemaabyss/...`. **Была обнаружена и исправлена проблема с регистром имени пользователя**, так как Docker CLI требует `lowercase`.
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+**Шаг 2: Создание манифестов для `proxy-service` и `events-service`**
 
-```
-Как только сборка отработает и в github registry появятся ваши образы, можно переходить к блоку настройки Kubernetes
-Успешным результатом данного шага является "зеленая" сборка и "зеленые" тесты
+На основе предоставленных примеров были созданы файлы `proxy-service.yaml` и `events-service.yaml`, каждый из которых содержит ресурсы `Deployment` и `Service`. В процессе были решены следующие задачи:
+*   **Корректная конфигурация `env`:** Для `events-service` были добавлены все необходимые переменные окружения для подключения к Kafka и PostgreSQL.
+*   **Настройка Health Checks:** Для обоих сервисов были настроены `livenessProbe` и `readinessProbe`, указывающие на реальные `healthcheck`-эндпоинты (`/health` и `/api/events/health`), что предотвратило циклические перезапуски подов (`CrashLoopBackOff`).
+*   **Проброс статусов и заголовков:** Код `proxy-service` был доработан для корректного проксирования не только тела ответа, но и **HTTP-статуса и заголовков**, что позволило тестам на создание сущностей (ожидающим статус `201 Created`) проходить успешно.
 
+**Шаг 3: Развертывание в Minikube**
 
-### Proxy в Kubernetes
+В процессе развертывания была решена **проблема с запуском `ingress-addon`** в условиях корпоративной сети. Решение включало предварительное скачивание необходимых Docker-образов и их загрузку в Minikube с помощью `minikube image load`.
 
-#### Шаг 1
-Для деплоя в kubernetes необходимо залогиниться в docker registry Github'а.
-1. Создайте Personal Access Token (PAT) https://github.com/settings/tokens . Создавайте class с правом read:packages
-2. В src/kubernetes/*.yaml (event-service, monolith, movies-service и proxy-service)  отредактируйте путь до ваших образов 
-```bash
- spec:
-      containers:
-      - name: events-service
-        image: ghcr.io/ваш логин/имя репозитория/events-service:latest
-```
-3. Добавьте в секрет src/kubernetes/dockerconfigsecret.yaml в поле
-```bash
- .dockerconfigjson: значение в base64 файла ~/.docker/config.json
-```
+После решения проблем с окружением, вся инфраструктура (Postgres, Kafka, Zookeeper) и все приложения (monolith, movies, events, proxy) были успешно развернуты в `namespace cinemaabyss`.
 
-4. Если в ~/.docker/config.json нет значения для аутентификации
-```json
-{
-        "auths": {
-                "ghcr.io": {
-                       тут пусто
-                }
-        }
-}
-```
-то выполните 
+**Шаг 4: Тестирование**
 
-и добавьте
+Для проведения тестов была решена **проблема сетевой связности** между тестовым контейнером Newman и кластером Minikube, работающим в режиме `NodePort`. Был создан специальный скрипт `run-k8s-tests.sh`, который:
+1.  Автоматически определяет IP-адрес Minikube (`minikube ip`).
+2.  Запускает тестовый контейнер с флагом `--add-host`, "пробрасывая" домен `cinemaabyss.example.com` на IP-адрес Minikube.
+3.  Подключает тестовый контейнер к сети `minikube` для гарантированной связности.
 
-```json 
- "auth": "имя пользователя:токен в base64"
-```
+Все тесты из коллекции Postman для Kubernetes-окружения **успешно пройдены**.
 
-Чтобы получить значение в base64 можно выполнить команду
-```bash
- echo -n ваш_логин:ваш_токен | base64
-```
+**Приложенные артефакты:**
 
-После заполнения config.json, также прогоните содержимое через base64
+*   **Результаты выполнения тестов:**
+    ![Результаты тестов в Kubernetes](./docs/screenshots/full-kuber-test-log.png)
 
-```bash
-cat .docker/config.json | base64
-```
-
-и полученное значение добавляем в
-
-```bash
- .dockerconfigjson: значение в base64 файла ~/.docker/config.json
-```
-
-#### Шаг 2
-
-  Доработайте src/kubernetes/event-service.yaml и src/kubernetes/proxy-service.yaml
-
-  - Необходимо создать Deployment и Service 
-  - Доработайте ingress.yaml, чтобы можно было с помощью тестов проверить создание событий
-  - Выполните дальшейшие шаги для поднятия кластера:
-
-  1. Создайте namespace:
-  ```bash
-  kubectl apply -f src/kubernetes/namespace.yaml
-  ```
-  2. Создайте секреты и переменные
-  ```bash
-  kubectl apply -f src/kubernetes/configmap.yaml
-  kubectl apply -f src/kubernetes/secret.yaml
-  kubectl apply -f src/kubernetes/dockerconfigsecret.yaml
-  kubectl apply -f src/kubernetes/postgres-init-configmap.yaml
-  ```
-
-  3. Разверните базу данных:
-  ```bash
-  kubectl apply -f src/kubernetes/postgres.yaml
-  ```
-
-  На этом этапе если вызвать команду
-  ```bash
-  kubectl -n cinemaabyss get pod
-  ```
-  Вы увидите
-
-  NAME         READY   STATUS    
-  postgres-0   1/1     Running   
-
-  4. Разверните Kafka:
-  ```bash
-  kubectl apply -f src/kubernetes/kafka/kafka.yaml
-  ```
-
-  Проверьте, теперь должно быть запущено 3 пода, если что-то не так, то посмотрите логи
-  ```bash
-  kubectl -n cinemaabyss logs имя_пода (например - kafka-0)
-  ```
-
-  5. Разверните монолит:
-  ```bash
-  kubectl apply -f src/kubernetes/monolith.yaml
-  ```
-  6. Разверните микросервисы:
-  ```bash
-  kubectl apply -f src/kubernetes/movies-service.yaml
-  kubectl apply -f src/kubernetes/events-service.yaml
-  ```
-  7. Разверните прокси-сервис:
-  ```bash
-  kubectl apply -f src/kubernetes/proxy-service.yaml
-  ```
-
-  После запуска и поднятия подов вывод команды 
-  ```bash
-  kubectl -n cinemaabyss get pod
-  ```
-
-  Будет наподобие такого
-
-  NAME                              READY   STATUS    
-
-  events-service-7587c6dfd5-6whzx   1/1     Running  
-
-  kafka-0                           1/1     Running   
-
-  monolith-8476598495-wmtmw         1/1     Running  
-
-  movies-service-6d5697c584-4qfqs   1/1     Running  
-
-  postgres-0                        1/1     Running  
-
-  proxy-service-577d6c549b-6qfcv    1/1     Running  
-
-  zookeeper-0                       1/1     Running 
-
-  8. Добавим ingress
-
-  - добавьте аддон
-  ```bash
-  minikube addons enable ingress
-  ```
-  ```bash
-  kubectl apply -f src/kubernetes/ingress.yaml
-  ```
-  9. Добавьте в /etc/hosts
-  127.0.0.1 cinemaabyss.example.com
-
-  10. Вызовите
-  ```bash
-  minikube tunnel
-  ```
-  11. Вызовите https://cinemaabyss.example.com/api/movies
-  Вы должны увидеть вывод списка фильмов
-  Можно поэкспериментировать со значением   MOVIES_MIGRATION_PERCENT в src/kubernetes/configmap.yaml и убедится, что вызовы movies уходят полностью в новый сервис
-
-  12. Запустите тесты из папки tests/postman
-  ```bash
-   npm run test:kubernetes
-  ```
-  Часть тестов с health-чек упадет, но создание событий отработает.
-  Откройте логи event-service и сделайте скриншот обработки событий
-
-#### Шаг 3
-Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
+*   **Логи `event-service`, подтверждающие обработку событий:**
+    ![Логи обработки событий в event-service](./docs/screenshots/k8s-events-service-logs.png) 
 
 
 ## Задание 4

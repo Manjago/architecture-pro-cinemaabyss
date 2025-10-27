@@ -12,6 +12,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
+import spark.Response;
 
 public class ProxyService {
 
@@ -29,9 +30,9 @@ public class ProxyService {
                 .build();
     }
 
-    public String handleRequest(Config config, Request sparkRequest) throws IOException, InterruptedException {
+    public String handleRequest(Config config, Request sparkRequest, Response sparkResponse) throws IOException, InterruptedException {
         final String targetUrl = selectTarget(config, sparkRequest.pathInfo());
-        return proxyRequest(targetUrl, sparkRequest);
+        return proxyRequest(targetUrl, sparkRequest, sparkResponse); // Передаем sparkResponse дальше
     }
 
     private String selectTarget(Config config, String path) {
@@ -57,7 +58,7 @@ public class ProxyService {
         }
     }
 
-    private String proxyRequest(String targetUrl, Request sparkRequest) throws IOException, InterruptedException {
+    private String proxyRequest(String targetUrl, Request sparkRequest, Response sparkResponse) throws IOException, InterruptedException {
         final String method = sparkRequest.requestMethod();
         final String path = sparkRequest.pathInfo();
         final String queryString = sparkRequest.queryString();
@@ -96,7 +97,18 @@ public class ProxyService {
         final HttpResponse<String> response = httpClient.send(request,
                 HttpResponse.BodyHandlers.ofString());
 
-        logger.info("Response status: {}", response.statusCode());
+        // Устанавливаем статус ответа
+        sparkResponse.status(response.statusCode());
+
+        // Копируем заголовки ответа, кроме тех, что управляются сервером
+        final Set<String> skipResponseHeaders = Set.of("transfer-encoding", "date", "server");
+        response.headers().map().forEach((header, values) -> {
+        if (!skipResponseHeaders.contains(header.toLowerCase())) {
+            values.forEach(value -> sparkResponse.header(header, value));
+        }
+       });
+
+        logger.info("Proxied response with status: {}", response.statusCode());
         return response.body();
     }
 }

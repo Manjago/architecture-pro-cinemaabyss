@@ -37,13 +37,13 @@ public class Main {
         });
 
         // Универсальный роут для всех методов и путей
-        get("/*", (req, res) -> proxyService.handleRequest(config, req));
-        post("/*", (req, res) -> proxyService.handleRequest(config, req));
-        put("/*", (req, res) -> proxyService.handleRequest(config, req));
-        delete("/*", (req, res) -> proxyService.handleRequest(config, req));
-        patch("/*", (req, res) -> proxyService.handleRequest(config, req));
-        options("/*", (req, res) -> proxyService.handleRequest(config, req));
-        head("/*", (req, res) -> proxyService.handleRequest(config, req));
+        get("/*", (req, res) -> proxyService.handleRequest(config, req, res));
+        post("/*", (req, res) -> proxyService.handleRequest(config, req, res));
+        put("/*", (req, res) -> proxyService.handleRequest(config, req, res));
+        delete("/*", (req, res) -> proxyService.handleRequest(config, req, res));
+        patch("/*", (req, res) -> proxyService.handleRequest(config, req, res));
+        options("/*", (req, res) -> proxyService.handleRequest(config, req, res));
+        head("/*", (req, res) -> proxyService.handleRequest(config, req, res));
 
         awaitInitialization();
         logger.info("Proxy Service started successfully!");
