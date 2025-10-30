@@ -50,11 +50,12 @@ jobs:
             type=ref,event=branch
             latest
 
-      - name: Build and push Monolith Docker image
+      - name: Build and load Monolith Docker image
         uses: docker/build-push-action@v4
         with:
           context: ./src/monolith
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta-monolith.outputs.tags }}
           labels: ${{ steps.meta-monolith.outputs.labels }}
           cache-from: type=gha
@@ -72,11 +73,12 @@ jobs:
             type=ref,event=branch
             latest
 
-      - name: Build and push Movies Service Docker image
+      - name: Build and load Movies Service Docker image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/movies
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta-movies.outputs.tags }}
           labels: ${{ steps.meta-movies.outputs.labels }}
           cache-from: type=gha
@@ -94,11 +96,12 @@ jobs:
             type=ref,event=branch
             latest
 
-      - name: Build and push proxy-service Docker image
+      - name: Build and load proxy-service Docker image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/proxy
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta-proxy-service.outputs.tags }}
           labels: ${{ steps.meta-proxy-service.outputs.labels }}
           cache-from: type=gha
@@ -116,13 +119,27 @@ jobs:
             type=ref,event=branch
             latest
 
-      - name: Build and push events-service Docker image
+      - name: Build and load events-service Docker image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/events
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta-events-service.outputs.tags }}
           labels: ${{ steps.meta-events-service.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
             
+      - name: Start services for testing
+        run: docker-compose up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services to start..."
+          sleep 45 # Даем 45 секунд на запуск, включая wait-for-it.sh
+
+      - name: Run API tests
+        run: |
+          cd tests/postman
+          npm install
+          npm run test:docker            
