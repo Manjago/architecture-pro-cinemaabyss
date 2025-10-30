@@ -138,6 +138,10 @@ jobs:
       - name: Start services for testing
         run: docker-compose up -d
 
+      - name: Show initial container logs
+        if: always() 
+        run: docker-compose logs --tail="50"
+
       - name: Wait for services to be healthy
         run: |
           echo "Waiting for all services to become available..."
