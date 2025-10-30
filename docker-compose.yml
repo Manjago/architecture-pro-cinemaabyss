@@ -58,6 +58,7 @@ services:
     container_name: cinemaabyss-monolith
     depends_on:
       - postgres
+    command: ["/usr/local/bin/wait-for-it.sh", "postgres:5432", "-t", "60", "--", "./monolith"]
     ports:
       - "8080:8080"
     environment:
@@ -74,6 +75,7 @@ services:
     container_name: cinemaabyss-movies-service
     depends_on:
       - postgres
+    command: ["/usr/local/bin/wait-for-it.sh", "postgres:5432", "-t", "60", "--", "./movies-service"]
     ports:
       - "8081:8081"
     environment:

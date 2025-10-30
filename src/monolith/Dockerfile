@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o monolith .
 # Use a smaller image for the final application
 FROM alpine:latest  
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates bash
 
 WORKDIR /root/
 
@@ -26,6 +26,9 @@ COPY --from=builder /app/monolith .
 
 # Expose the application port
 EXPOSE 8080
+
+COPY wait-for-it.sh /usr/local/bin/wait-for-it.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh
 
 # Command to run the executable
 CMD ["./monolith"]
