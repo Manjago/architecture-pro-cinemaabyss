@@ -12,7 +12,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  
+  # Имя репозитория с сохранением регистра
+  REPOSITORY_NAME: ${{ github.repository }}
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -23,6 +25,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Generate lowercase names
+        id: names
+        run: |
+          echo "LOWERCASE_REPO=$(echo '${{ env.REPOSITORY_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -41,8 +48,7 @@ jobs:
         id: meta-monolith
         uses: docker/metadata-action@v4
         with:
-          # Собираем правильное имя прямо здесь
-          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/monolith
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/monolith
           tags: latest
 
       - name: Build and load Monolith image
@@ -59,7 +65,7 @@ jobs:
         id: meta-movies
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/movies-service
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/movies-service
           tags: latest
       
       - name: Build and load Movies Service image
@@ -76,7 +82,7 @@ jobs:
         id: meta-proxy
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/proxy-service
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/proxy-service
           tags: latest
 
       - name: Build and load Proxy Service image
@@ -93,7 +99,7 @@ jobs:
         id: meta-events
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/events-service
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/events-service
           tags: latest
 
       - name: Build and load Events Service image
