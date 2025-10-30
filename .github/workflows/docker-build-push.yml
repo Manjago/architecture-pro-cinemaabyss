@@ -138,10 +138,42 @@ jobs:
       - name: Start services for testing
         run: docker-compose up -d
 
-      - name: Wait for services to be ready
+      - name: Wait for services to be healthy
         run: |
-          echo "Waiting for services to start..."
-          sleep 45 # Даем 45 секунд на запуск, включая wait-for-it.sh
+          echo "Waiting for all services to become available..."
+          TIMEOUT=120
+          END_TIME=$((SECONDS + TIMEOUT))
+          
+          # Мы не можем использовать healthcheck, поэтому будем проверять порты
+          # wait-for-it.sh здесь недоступен, используем nc
+          
+          # Сначала ждем, когда docker-compose поднимет все контейнеры
+          until [ "$(docker-compose ps -q | wc -l)" -eq $(docker-compose ps --services | wc -l) ]; do
+            if [ $SECONDS -gt $END_TIME ]; then echo "Timeout waiting for containers to start"; exit 1; fi
+            sleep 2
+          done
+
+          echo "All containers are up, now checking ports..."
+          
+          SERVICES_PORTS="monolith:8080 movies-service:8081 proxy-service:8000 events-service:8082"
+
+          for sp in $SERVICES_PORTS; do
+            SERVICE=$(echo $sp | cut -d: -f1)
+            PORT=$(echo $sp | cut -d: -f2)
+            echo "Waiting for $SERVICE on port $PORT..."
+            
+            # Внутри CI runner'а нужно обращаться к localhost, так как порты проброшены
+            while ! nc -z localhost $PORT >/dev/null 2>&1; do
+              if [ $SECONDS -gt $END_TIME ]; then
+                echo "Timeout waiting for $SERVICE on localhost:$PORT."
+                docker-compose logs $SERVICE
+                exit 1
+              fi
+              sleep 2
+            done
+            echo "$SERVICE is up!"
+          done
+          echo "All services are ready for tests!"
 
       - name: Run API tests
         run: |
