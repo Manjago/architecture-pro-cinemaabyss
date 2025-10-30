@@ -184,3 +184,15 @@ jobs:
           cd tests/postman
           npm install
           npm run test:local
+
+      - name: Push Docker images to GHCR
+        if: >- 
+          github.ref == 'refs/heads/main' ||
+          github.ref == 'refs/heads/cinema' ||
+          github.ref == 'refs/heads/cinema-local'
+        run: |
+          echo "Pushing images to GHCR..."
+          docker push ${{ env.REGISTRY }}/${{ env.MONOLITH_IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.MOVIES_SERVICE_IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.PROXY_SERVICE_IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}:latest
