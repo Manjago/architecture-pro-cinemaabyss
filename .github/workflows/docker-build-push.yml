@@ -103,4 +103,26 @@ jobs:
           labels: ${{ steps.meta-proxy-service.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
+
+      - name: Extract metadata (tags, labels) for events-service
+        id: meta-events-service
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=branch
+            latest
+
+      - name: Build and push events-service Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src/microservices/events
+          push: true
+          tags: ${{ steps.meta-events-service.outputs.tags }}
+          labels: ${{ steps.meta-events-service.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+            
