@@ -3,7 +3,7 @@ name: Docker Build and Push
 on:
   workflow_dispatch:
   push:
-    branches: [ mainn, cinema, cinema-local ]
+    branches: [ main, cinema, cinema-local ] 
     paths:
       - 'src/**'
       - '.github/workflows/docker-build-push.yml'
@@ -12,13 +12,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Собираем правильное имя образа в нижнем регистре
-  IMAGE_PREFIX: ${{ toLower(github.repository) }}
-  MONOLITH_IMAGE_NAME: ${{ env.IMAGE_PREFIX }}/monolith
-  MOVIES_SERVICE_IMAGE_NAME: ${{ env.IMAGE_PREFIX }}/movies-service
-  EVENTS_SERVICE_IMAGE_NAME: ${{ env.IMAGE_PREFIX }}/events-service
-  PROXY_SERVICE_IMAGE_NAME: ${{ env.IMAGE_PREFIX }}/proxy-service
-
+  
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -40,19 +34,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Monolith
+      # Здесь и далее решаем проблему - имя репозитория содержит большую буквы, но при push требуется lowercase
+
+      # --- БЛОК ДЛЯ MONOLITH ---
+      - name: Extract metadata for Monolith
         id: meta-monolith
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.MONOLITH_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
+          # Собираем правильное имя прямо здесь
+          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/monolith
+          tags: latest
 
-      - name: Build and load Monolith Docker image
+      - name: Build and load Monolith image
         uses: docker/build-push-action@v4
         with:
           context: ./src/monolith
@@ -60,22 +53,16 @@ jobs:
           load: true
           tags: ${{ steps.meta-monolith.outputs.tags }}
           labels: ${{ steps.meta-monolith.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      - name: Extract metadata (tags, labels) for Movies Service
+      # --- БЛОК ДЛЯ MOVIES ---
+      - name: Extract metadata for Movies Service
         id: meta-movies
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.MOVIES_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
-
-      - name: Build and load Movies Service Docker image
+          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/movies-service
+          tags: latest
+      
+      - name: Build and load Movies Service image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/movies
@@ -83,55 +70,42 @@ jobs:
           load: true
           tags: ${{ steps.meta-movies.outputs.tags }}
           labels: ${{ steps.meta-movies.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      - name: Extract metadata (tags, labels) for proxy-service
-        id: meta-proxy-service
+      # --- БЛОК ДЛЯ PROXY ---
+      - name: Extract metadata for Proxy Service
+        id: meta-proxy
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.PROXY_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
+          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/proxy-service
+          tags: latest
 
-      - name: Build and load proxy-service Docker image
+      - name: Build and load Proxy Service image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/proxy
           push: false
           load: true
-          tags: ${{ steps.meta-proxy-service.outputs.tags }}
-          labels: ${{ steps.meta-proxy-service.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
 
-      - name: Extract metadata (tags, labels) for events-service
-        id: meta-events-service
+      # --- БЛОК ДЛЯ EVENTS ---
+      - name: Extract metadata for Events Service
+        id: meta-events
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
+          images: ${{ env.REGISTRY }}/${{ toLower(github.repository) }}/events-service
+          tags: latest
 
-      - name: Build and load events-service Docker image
+      - name: Build and load Events Service image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/events
           push: false
           load: true
-          tags: ${{ steps.meta-events-service.outputs.tags }}
-          labels: ${{ steps.meta-events-service.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-            
+          tags: ${{ steps.meta-events.outputs.tags }}
+          labels: ${{ steps.meta-events.outputs.labels }}
+
+      # --- БЛОК ТЕСТИРОВАНИЯ ---
       - name: Install Docker Compose
         run: |
           sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -187,14 +161,12 @@ jobs:
           npm install
           npm run test:local
 
+      # --- ФИНАЛЬНЫЙ БЛОК ПУША ---
       - name: Push Docker images to GHCR
-        if: >- 
-          github.ref == 'refs/heads/main' ||
-          github.ref == 'refs/heads/cinema' ||
-          github.ref == 'refs/heads/cinema-local'
+        if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cinema' || github.ref == 'refs/heads/cinema-local')
         run: |
           echo "Pushing images to GHCR..."
-          docker push ${{ env.REGISTRY }}/${{ env.MONOLITH_IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.MOVIES_SERVICE_IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.PROXY_SERVICE_IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}:latest
+          docker push ${{ steps.meta-monolith.outputs.tags }}
+          docker push ${{ steps.meta-movies.outputs.tags }}
+          docker push ${{ steps.meta-proxy.outputs.tags }}
+          docker push ${{ steps.meta-events.outputs.tags }}
