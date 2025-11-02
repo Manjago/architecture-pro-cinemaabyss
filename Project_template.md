@@ -141,80 +141,40 @@ MVP-сервис для работы с Kafka реализован на **Kotlin
     ![Логи обработки событий в event-service](./docs/screenshots/k8s-events-service-logs.png) 
 
 
-## Задание 4
-Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
+### Решение Задания 4
 
-Для этого:
-1. Перейдите в директорию helm и отредактируйте файл values.yaml
+Для упрощения развертывания и управления приложением в Kubernetes был реализован Helm-чарт, который пакетирует все необходимые манифесты и конфигурации.
 
-```yaml
-# Proxy service configuration
-proxyService:
-  enabled: true
-  image:
-    repository: ghcr.io/db-exp/cinemaabysstest/proxy-service
-    tag: latest
-    pullPolicy: Always
-  replicas: 1
-  resources:
-    limits:
-      cpu: 300m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
-  service:
-    port: 80
-    targetPort: 8000
-    type: ClusterIP
-```
+**Проделанная работа:**
 
-- Вместо ghcr.io/db-exp/cinemaabysstest/proxy-service напишите свой путь до образа для всех сервисов
-- для imagePullSecret проставьте свое значение (скопируйте из конфигурации kubernetes)
-  ```yaml
-  imagePullSecrets:
-      dockerconfigjson: ewoJImF1dGhzIjogewoJCSJnaGNyLmlvIjogewoJCQkiYXV0aCI6ICJaR0l0Wlhod09tZG9jRjl2UTJocVZIa3dhMWhKVDIxWmFVZHJOV2hRUW10aFVXbFZSbTVaTjJRMFNYUjRZMWM9IgoJCX0KCX0sCgkiY3JlZHNTdG9yZSI6ICJkZXNrdG9wIiwKCSJjdXJyZW50Q29udGV4dCI6ICJkZXNrdG9wLWxpbnV4IiwKCSJwbHVnaW5zIjogewoJCSIteC1jbGktaGludHMiOiB7CgkJCSJlbmFibGVkIjogInRydWUiCgkJfQoJfSwKCSJmZWF0dXJlcyI6IHsKCQkiaG9va3MiOiAidHJ1ZSIKCX0KfQ==
-  ```
+1.  **Параметризация `values.yaml`:**
+    *   Все пути к образам в GitHub Container Registry (`ghcr.io`) были вынесены в `values.yaml` и исправлены для использования `lowercase` имени владельца (`manjago`), что является требованием Docker CLI.
+    *   В секцию `imagePullSecrets` был добавлен base64-encoded `dockerconfigjson` для аутентификации в `ghcr.io`. В процессе отладки была решена проблема `illegal base64 data`, которая требовала добавления `padding` символов (`==`) в конец base64-строки для совместимости с Helm-парсером.
 
-2. В папке ./templates/services заполните шаблоны для proxy-service.yaml и events-service.yaml (опирайтесь на свою kubernetes конфигурацию - смысл helm'а сделать шаблоны для быстрого обновления и установки)
+2.  **Шаблонизация манифестов:**
+    *   Были созданы шаблоны для `proxy-service` и `events-service` в директории `templates/services/`.
+    *   Все "статичные" значения (количество реплик, имена и теги образов, порты, лимиты ресурсов) были заменены на переменные Helm (`{{ .Values... }}`).
+    *   Для `events-service` была корректно реализована передача переменных окружения для подключения к Kafka и PostgreSQL, значения для которых берутся как из `values.yaml`, так и из `Secret`'ов.
+    *   Были добавлены стандартные Helm-метки (`app.kubernetes.io/name`, `app.kubernetes.io/instance`) для улучшения управляемости релиза.
 
-```yaml
-template:
-    metadata:
-      labels:
-        app: proxy-service
-    spec:
-      containers:
-       Тут ваша конфигурация
-```
+3.  **Установка и проверка:**
+    *   После очистки кластера (`kubectl delete namespace cinemaabyss`) приложение было успешно развернуто одной командой: `helm install cinemaabyss ./src/kubernetes/helm --namespace cinemaabyss --create-namespace`.
+    *   В процессе отладки была обнаружена и исправлена опечатка в `ConfigMap` шаблоне (`movies` вместо `movies-service`), которая приводила к ошибкам `500 Internal Server Error`.
+    *   **Заметка по доступу к кластеру:** В моем окружении `minikube` развернул `ingress-controller` с `Service` типа `NodePort`, а не `LoadBalancer`. В связи с этим, вместо использования `minikube tunnel`, для доступа к сервису был использован более прямой и надежный в данных условиях метод: обращение через IP-адрес `minikube` и динамический `NodePort`.
+    *   Для финального тестирования был использован подход с `NodePort` для Ingress Controller'а и кастомный скрипт `run-k8s-tests.sh`, что подтвердило полную работоспособность развернутого через Helm приложения.
 
-3. Проверьте установку
-Сначала удалим установку руками
+В результате был создан полноценный, переиспользуемый Helm-чарт, позволяющий разворачивать, конфигурировать и обновлять приложение "Кинобездна" централизованно и предсказуемо.
 
-```bash
-kubectl delete all --all -n cinemaabyss
-kubectl delete  namespace cinemaabyss
-```
-Запустите 
-```bash
-helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace
-```
-Если в процессе будет ошибка
-```code
-[2025-04-08 21:43:38,780] ERROR Fatal error during KafkaServer startup. Prepare to shutdown (kafka.server.KafkaServer)
-kafka.common.InconsistentClusterIdException: The Cluster ID OkOjGPrdRimp8nkFohYkCw doesn't match stored clusterId Some(sbkcoiSiQV2h_mQpwy05zQ) in meta.properties. The broker is trying to join the wrong cluster. Configured zookeeper.connect may be wrong.
-```
+**Приложенные артефакты:**
 
-Проверьте развертывание:
-```bash
-kubectl get pods -n cinemaabyss
-minikube tunnel
-```
+*   **Скриншот развертывания Helm:**
+    ![Скриншот развертывания Helm](./docs/screenshots/helm-deployment-status.png)
 
-Потом вызовите 
-https://cinemaabyss.example.com/api/movies
-и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+*   **Результаты выполнения тестов для Helm-релиза:**
+    ![Результаты тестов для Helm-релиза](./docs/screenshots/helm-tests-passed.png)
 
+*   **Пример вызова API после установки Helm-чарта:**
+    ![Вызов API Helm-релиза](./docs/screenshots/helm-curl-result.png)
 
 # Задание 5
 Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.
