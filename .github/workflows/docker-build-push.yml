@@ -3,7 +3,7 @@ name: Docker Build and Push
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, cinema, cinema-local ] 
     paths:
       - 'src/**'
       - '.github/workflows/docker-build-push.yml'
@@ -12,10 +12,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  MONOLITH_IMAGE_NAME: ${{ github.repository }}/monolith
-  MOVIES_SERVICE_IMAGE_NAME: ${{ github.repository }}/movies-service
-  EVENTS_SERVICE_IMAGE_NAME: ${{ github.repository }}/events-service
-  PROXY_SERVICE_IMAGE_NAME: ${{ github.repository }}/proxy-service
+  # Имя репозитория с сохранением регистра
+  REPOSITORY_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -28,6 +26,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Generate lowercase names
+        id: names
+        run: |
+          echo "LOWERCASE_REPO=$(echo '${{ env.REPOSITORY_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -38,48 +41,138 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Monolith
+      # Здесь и далее решаем проблему - имя репозитория содержит большую буквы, но при push требуется lowercase
+
+      # --- БЛОК ДЛЯ MONOLITH ---
+      - name: Extract metadata for Monolith
         id: meta-monolith
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.MONOLITH_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/monolith
+          tags: latest
 
-      - name: Build and push Monolith Docker image
+      - name: Build and load Monolith image
         uses: docker/build-push-action@v4
         with:
           context: ./src/monolith
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta-monolith.outputs.tags }}
           labels: ${{ steps.meta-monolith.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      - name: Extract metadata (tags, labels) for Movies Service
+      # --- БЛОК ДЛЯ MOVIES ---
+      - name: Extract metadata for Movies Service
         id: meta-movies
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.MOVIES_SERVICE_IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-            type=ref,event=branch
-            latest
-
-      - name: Build and push Movies Service Docker image
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/movies-service
+          tags: latest
+      
+      - name: Build and load Movies Service image
         uses: docker/build-push-action@v4
         with:
           context: ./src/microservices/movies
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta-movies.outputs.tags }}
           labels: ${{ steps.meta-movies.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      
+      # --- БЛОК ДЛЯ PROXY ---
+      - name: Extract metadata for Proxy Service
+        id: meta-proxy
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/proxy-service
+          tags: latest
+
+      - name: Build and load Proxy Service image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src/microservices/proxy
+          push: false
+          load: true
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+
+      # --- БЛОК ДЛЯ EVENTS ---
+      - name: Extract metadata for Events Service
+        id: meta-events
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.LOWERCASE_REPO }}/events-service
+          tags: latest
+
+      - name: Build and load Events Service image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src/microservices/events
+          push: false
+          load: true
+          tags: ${{ steps.meta-events.outputs.tags }}
+          labels: ${{ steps.meta-events.outputs.labels }}
+
+      # --- БЛОК ТЕСТИРОВАНИЯ ---
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+
+      - name: Start services for testing
+        run: docker-compose up -d
+
+      - name: Show initial container logs
+        if: always() 
+        run: docker-compose logs --tail="50"
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for all services to become available..."
+          TIMEOUT=120
+          END_TIME=$((SECONDS + TIMEOUT))
+          
+          # Мы не можем использовать healthcheck, поэтому будем проверять порты
+          # wait-for-it.sh здесь недоступен, используем nc
+          
+          # Сначала ждем, когда docker-compose поднимет все контейнеры
+          until [ "$(docker-compose ps -q | wc -l)" -eq $(docker-compose ps --services | wc -l) ]; do
+            if [ $SECONDS -gt $END_TIME ]; then echo "Timeout waiting for containers to start"; exit 1; fi
+            sleep 2
+          done
+
+          echo "All containers are up, now checking ports..."
+          
+          SERVICES_PORTS="monolith:8080 movies-service:8081 proxy-service:8000 events-service:8082"
+
+          for sp in $SERVICES_PORTS; do
+            SERVICE=$(echo $sp | cut -d: -f1)
+            PORT=$(echo $sp | cut -d: -f2)
+            echo "Waiting for $SERVICE on port $PORT..."
+            
+            # Внутри CI runner'а нужно обращаться к localhost, так как порты проброшены
+            while ! nc -z localhost $PORT >/dev/null 2>&1; do
+              if [ $SECONDS -gt $END_TIME ]; then
+                echo "Timeout waiting for $SERVICE on localhost:$PORT."
+                docker-compose logs $SERVICE
+                exit 1
+              fi
+              sleep 2
+            done
+            echo "$SERVICE is up!"
+          done
+          echo "All services are ready for tests!"
+
+      - name: Run API tests
+        run: |
+          cd tests/postman
+          npm install
+          npm run test:local
+
+      # --- ФИНАЛЬНЫЙ БЛОК ПУША ---
+      - name: Push Docker images to GHCR
+        if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cinema' || github.ref == 'refs/heads/cinema-local')
+        run: |
+          echo "Pushing images to GHCR..."
+          docker push ${{ steps.meta-monolith.outputs.tags }}
+          docker push ${{ steps.meta-movies.outputs.tags }}
+          docker push ${{ steps.meta-proxy.outputs.tags }}
+          docker push ${{ steps.meta-events.outputs.tags }}

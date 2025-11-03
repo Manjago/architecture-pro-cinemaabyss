@@ -1,0 +1,18 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: movies-service-cb
+spec:
+  host: movies-service.cinemaabyss.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1 # <-- Искусственно "душим" сервис
+      http:
+        http1MaxPendingRequests: 1 # <-- Не больше 1 запроса в очереди
+        maxRequestsPerConnection: 1
+    outlierDetection:
+      consecutive5xxErrors: 1 # <-- Считать сбой после 1-й же 5xx ошибки
+      interval: 1s # Проверять раз в секунду
+      baseEjectionTime: 3m # "Выкидывать" сбойный под из пула на 3 минуты
+      maxEjectionPercent: 100 # Можно выкинуть все поды
