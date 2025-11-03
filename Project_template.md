@@ -1,6 +1,6 @@
 ## Изучите [README.md](README.md) файл и структуру проекта.
 
-## Задание 1
+## Решение Задания 1
 
 1. Спроектируйте to be архитектуру КиноБездны, разделив всю систему на отдельные домены и организовав интеграционное взаимодействие и единую точку вызова сервисов.
 Результат представьте в виде контейнерной диаграммы в нотации С4.
@@ -8,8 +8,6 @@
 ![Диаграмма контейнеров To-Be](docs/diagrams/C2_Container_ToBe.png)
 
 [Исходный код диаграммы в формате PlantUML](docs/diagrams/C2_Container_ToBe.puml)
-
-## Задание 2
 
 ### Решение Задания 2
 
@@ -176,75 +174,36 @@ MVP-сервис для работы с Kafka реализован на **Kotlin
 *   **Пример вызова API после установки Helm-чарта:**
     ![Вызов API Helm-релиза](./docs/screenshots/helm-curl-result.png)
 
-# Задание 5
-Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.
+### Решение Задания 5
 
-```bash
+Для демонстрации возможностей Service Mesh по повышению надежности системы был развернут Istio и настроен паттерн **Circuit Breaker ("автоматический выключатель")**.
 
-helm repo add istio https://istio-release.storage.googleapis.com/charts
-helm repo update
+**Проделанная работа:**
 
-helm install istio-base istio/base -n istio-system --set defaultRevision=default --create-namespace
-helm install istio-ingressgateway istio/gateway -n istio-system
-helm install istiod istio/istiod -n istio-system --wait
+1.  **Установка Istio:**
+    *   В "чистый" кластер Minikube (с увеличенным объемом ресурсов CPU и RAM) была установлена платформа Istio с помощью официальных Helm-чартов.
+    *   Установка производилась в строгой последовательности (`istio-base` -> `istiod --wait` -> `istio-ingressgateway`) для решения проблем с инициализацией Admission Webhook'ов, возникавших при параллельной установке.
 
-helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace
+2.  **Интеграция приложения с Istio:**
+    *   Приложение "Кинобездна" было развернуто в кластере с помощью Helm-чарта из Задания 4.
+    *   Для `namespace cinemaabyss` была установлена метка `istio-injection=enabled`, что активировало автоматическое добавление sidecar-прокси `envoy` во все поды бизнес-сервисов.
+    *   Для инфраструктурных компонентов (`postgres`, `kafka`, `zookeeper`), работающих по нестандартным TCP-протоколам, инъекция sidecar'ов была явно отключена с помощью аннотации `sidecar.istio.io/inject: "false"`, чтобы избежать проблем совместимости.
 
-kubectl label namespace cinemaabyss istio-injection=enabled --overwrite
+3.  **Настройка Circuit Breaker:**
+    *   Был создан и применен манифест `circuit-breaker-config.yaml`, содержащий ресурс `DestinationRule` для `movies-service`.
+    *   В `DestinationRule` были заданы очень агрессивные настройки пула соединений (`maxConnections: 1`, `http1MaxPendingRequests: 1`) и обнаружения выбросов (`consecutive5xxErrors: 1`). Это было сделано намеренно, чтобы гарантированно спровоцировать срабатывание "выключателя" во время теста.
 
-kubectl get namespace -L istio-injection
+4.  **Нагрузочное тестирование:**
+    *   В кластер была развернута утилита `fortio` для проведения нагрузочного теста.
+    *   С помощью `fortio load` была создана лавина из 500 запросов с 50 одновременными соединениями, направленная на `movies-service`.
+    *   Результаты теста наглядно продемонстрировали работу Circuit Breaker'а: только малая часть запросов прошла успешно (код `200`), в то время как подавляющее большинство было немедленно отклонено `istio-proxy` с кодом `503 Service Unavailable`. Это доказывает, что Istio эффективно защитил сервис от перегрузки.
 
-kubectl apply -f .\src\kubernetes\circuit-breaker-config.yaml -n cinemaabyss
+**Приложенные артефакты:**
 
-```
+*   **Результаты нагрузочного теста `fortio`:**
+    На скриншоте видно распределение ответов: `99.6%` запросов получили статус `503`, что подтверждает срабатывание "автоматического выключателя".
+    ![Результаты теста Fortio](./docs/screenshots/istio-fortio-result.png)
 
-Тестирование
-
-# fortio
-```bash
-kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.25/samples/httpbin/sample-client/fortio-deploy.yaml -n cinemaabyss
-```
-
-# Get the fortio pod name
-```bash
-FORTIO_POD=$(kubectl get pod -n cinemaabyss | grep fortio | awk '{print $1}')
-
-kubectl exec -n cinemaabyss $FORTIO_POD -c fortio -- fortio load -c 50 -qps 0 -n 500 -loglevel Warning http://movies-service:8081/api/movies
-```
-Например,
-
-```bash
-kubectl exec -n cinemaabyss fortio-deploy-b6757cbbb-7c9qg  -c fortio -- fortio load -c 50 -qps 0 -n 500 -loglevel Warning http://movies-service:8081/api/movies
-```
-
-Вывод будет типа такого
-
-```bash
-IP addresses distribution:
-10.106.113.46:8081: 421
-Code 200 : 79 (15.8 %)
-Code 500 : 22 (4.4 %)
-Code 503 : 399 (79.8 %)
-```
-Можно еще проверить статистику
-
-```bash
-kubectl exec -n cinemaabyss fortio-deploy-b6757cbbb-7c9qg -c istio-proxy -- pilot-agent request GET stats | grep movies-service | grep pending
-```
-
-И там смотрим 
-
-```bash
-cluster.outbound|8081||movies-service.cinemaabyss.svc.cluster.local;.upstream_rq_pending_total: 311 - столько раз срабатывал circuit breaker
-You can see 21 for the upstream_rq_pending_overflow value which means 21 calls so far have been flagged for circuit breaking.
-```
-
-Приложите скриншот работы circuit breaker'а
-
-Удаляем все
-```bash
-istioctl uninstall --purge
-kubectl delete namespace istio-system
-kubectl delete all --all -n cinemaabyss
-kubectl delete namespace cinemaabyss
-```
+*   **Статистика Envoy-прокси:**
+    Вывод внутренней статистики `istio-proxy` показывает ненулевое значение счетчика `upstream_rq_pending_overflow`. Этот счетчик напрямую считает количество запросов, отброшенных из-за переполнения очереди ожидания, что является низкоуровневым подтверждением работы Circuit Breaker'а.
+    ![Статистика Envoy](./docs/screenshots/istio-envoy-stats.png)
