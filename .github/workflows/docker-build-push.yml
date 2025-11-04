@@ -162,10 +162,8 @@ jobs:
           echo "All services are ready for tests!"
 
       - name: Run API tests
-        run: |
-          cd tests/postman
-          npm install
-          npm run test:local
+        working-directory: tests/postman 
+        run: ./run-tests.sh -d -e docker
 
       # --- ФИНАЛЬНЫЙ БЛОК ПУША ---
       - name: Push Docker images to GHCR
