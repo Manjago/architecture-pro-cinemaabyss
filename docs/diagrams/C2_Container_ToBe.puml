@@ -1,0 +1,82 @@
+@startuml C2_Context_ToBe
+title Диаграмма контейнеров (C2) для системы "CinemaAbyss" (To-Be)
+
+top to bottom direction
+
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+
+' --- АКТОРЫ И ВНЕШНИЕ СИСТЕМЫ ---
+
+Person(user, "Пользователь", "Смотрит фильмы через браузер или мобильное приложение")
+
+System_Ext(ext_payment_gateway, "Платежная система", "Обрабатывает транзакции по банковским картам")
+System_Ext(recommendation_system, "Внешняя рекомендательная система", "Предоставляет персонализированные рекомендации фильмов")
+System_Ext(blob_storage, "Хранилище фильмов", "Хранит видеофайлы и постеры. [S3]")
+System_Ext(ext_online_cinema, "Онлайн-кинотеатры", "Партнеры-поставщики контента")
+
+' --- ГРАНИЦА НАШЕЙ СИСТЕМЫ ---
+System_Boundary(cinema_abyss, "Система 'Кинобездна'") {
+    Container(frontend_app, "Клиентское приложение", "JavaScript, React/Vue", "SPA-приложение, работающее в браузере пользователя")
+    Container(mobile_app, "Мобильное приложение", "Kotlin/Swift", "Нативное мобильное приложение")
+
+    Container(gateway, "API Gateway", "Java, Custom Proxy", "Единая точка входа, проксирование, Strangler Fig Facade")
+
+    Container(auth_service, "Auth Service", "Java + Lightweight framework", "Управление пользователями, аутентификация, авторизация")
+    Container(billing_service, "Billing Service", "Java + Lightweight framework", "Управление подписками и покупками")
+    Container(catalog_service, "Catalog Service", "Java + Lightweight framework", "Метаданные о фильмах, статьях, актерах")
+    Container(user_content_service, "User Content Service", "Java + Lightweight framework", "Управление оценками и комментариями")
+    Container(access_service, "Access Service", "Java + Lightweight framework", "Управление правами доступа к контенту")
+    Container(events_service, "Events Service", "Java + Lightweight framework", "Принимает события по REST и публикует их в Kafka")
+
+    Container(monolith, "Monolith (Legacy)", "Go", "Старая система, функциональность которой постепенно замещается")
+
+    ContainerDb(common_db, "Legacy DB", "PostgreSQL", "Общая база данных для монолита и мигрирующих сервисов")
+    ContainerDb(access_db, "Access DB", "Redis", "Оптимизированное хранилище прав доступа")
+    ContainerQueue(kafka, "Kafka", "Apache Kafka", "Брокер для асинхронного обмена событиями")
+}
+
+' --- СВЯЗИ ---
+
+' Пользователь -> Gateway
+Rel(user, frontend_app, "Использует", "UI")
+Rel(user, mobile_app, "Использует", "UI")
+Rel(frontend_app, gateway, "API-вызовы", "HTTPS/JSON")
+Rel(mobile_app, gateway, "API-вызовы", "HTTPS/JSON")
+
+' Gateway -> Микросервисы (синхронные вызовы)
+Rel(gateway, auth_service, "Аутентификация/авторизация", "REST/HTTPS")
+Rel(gateway, catalog_service, "Запрос метаданных контента", "REST/HTTPS")
+Rel(gateway, user_content_service, "Запрос/запись UGC", "REST/HTTPS")
+Rel(gateway, billing_service, "Управление платежами", "REST/HTTPS")
+Rel(gateway, access_service, "Проверка прав доступа", "REST/HTTPS")
+Rel(gateway, monolith, "Проксирование легаси-запросов", "HTTP") 
+
+' Микросервисы -> Внешние системы
+Rel(billing_service, ext_payment_gateway, "Проведение платежа", "REST/HTTPS")
+Rel(catalog_service, ext_online_cinema, "Импорт контента", "REST/HTTPS")
+
+' Микросервисы -> Хранилища данных
+Rel(auth_service, common_db, "CRUD пользователей", "JDBC")
+Rel(billing_service, common_db, "CRUD платежей/подписок", "JDBC")
+Rel(catalog_service, common_db, "CRUD метаданных", "JDBC")
+Rel(user_content_service, common_db, "CRUD UGC", "JDBC")
+Rel(access_service, access_db, "CRUD прав доступа", "Redis Protocol")
+Rel(events_service, common_db, "Хранение eventId для идемпотентности", "JDBC")
+
+' Клиент -> Хранилище блобов
+Rel(frontend_app, blob_storage, "Загрузка видео/изображений", "HTTPS")
+Rel(mobile_app, blob_storage, "Загрузка видео/изображений", "HTTPS")
+
+' --- АСИНХРОННОЕ ВЗАИМОДЕЙСТВИЕ (KAFKA) ---
+
+' Продюсеры событий
+Rel(auth_service, events_service, "Публикация событий о пользователях", "REST/HTTPS")
+Rel(billing_service, events_service, "Публикация событий о платежах", "REST/HTTPS")
+Rel(user_content_service, events_service, "Публикация событий об оценках", "REST/HTTPS")
+Rel(events_service, kafka, "Запись событий в топики", "Kafka Protocol")
+
+' Потребители событий
+Rel(kafka, access_service, "Обновление прав доступа", "Kafka Consumer")
+Rel(kafka, recommendation_system, "Получение данных для модели", "Kafka Consumer")
+
+@enduml

@@ -115,7 +115,7 @@ if [ "$USE_DOCKER" = true ]; then
   docker build -t cinemaabyss-api-tests .
   
   # Run the tests in Docker
-  docker run --network=cinemaabyss-network \
+    docker run --network=cinemaabyss-network \
     -v "$(pwd)/reports:/app/reports" \
     cinemaabyss-api-tests $CMD_ARGS
 else

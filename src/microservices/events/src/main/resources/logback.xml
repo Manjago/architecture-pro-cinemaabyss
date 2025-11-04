@@ -1,0 +1,29 @@
+<configuration>
+    <!-- Формат вывода логов -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Наше приложение - INFO -->
+    <logger name="com.cinemaabyss" level="INFO"/>
+    <logger name="EventsService" level="INFO"/>  
+    
+    <!-- Kafka clients - INFO чтобы видеть подключение -->
+    <logger name="org.apache.kafka" level="INFO"/>  
+
+    <!-- Отключаем дамп конфига Kafka -->
+    <logger name="org.apache.kafka.common.config.AbstractConfig" level="WARN"/>    
+
+    <!-- Javalin - только основные сообщения -->
+    <logger name="io.javalin.Javalin" level="INFO"/>
+    
+    <!-- Jetty - только ошибки -->
+    <logger name="org.eclipse.jetty" level="WARN"/>
+    
+    <!-- Все остальное - только ошибки -->
+    <root level="WARN">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
